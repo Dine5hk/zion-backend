@@ -1,17 +1,16 @@
-name: Deploy to EC2
+name: Deploy Backend to EC2
 
 on:
   push:
     branches:
-      - main
+      - main  # Change if your deploy branch is different
 
 jobs:
   deploy:
-    name: Deploy App to EC2 via SSH
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Code
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Set up SSH
@@ -20,15 +19,15 @@ jobs:
           echo "${{ secrets.KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.EC2_IP }} >> ~/.ssh/known_hosts
-      - name: Install Node.js and Build App
+
+      - name: Copy files to EC2
         run: |
-          curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-          sudo apt-get install -y nodejs
-          npm install
-          npm run build
-      - name: Deploy Build to EC2
+          rsync -avz --delete ./ ${{ secrets.USER }}@${{ secrets.EC2_IP }}:/var/www/zion-backend/
+
+      - name: Install dependencies & restart backend
         run: |
-          rsync -avz --delete ./dist/ ${{ secrets.USER }}@${{ secrets.EC2_IP }}:/var/www/zion-backend/
-      - name: Restart NGINX
-        run: |
-          ssh ${{ secrets.USER }}@${{ secrets.EC2_IP }} "sudo systemctl restart nginx"
+          ssh ${{ secrets.USER }}@${{ secrets.EC2_IP }} "
+            cd /var/www/zion-backend &&
+            npm install &&
+            pm2 start index.js --name zion-backend || pm2 restart zion-backend
+          "
