@@ -3,31 +3,39 @@ name: Deploy Backend to EC2
 on:
   push:
     branches:
-      - main  # Change if your deploy branch is different
+      - main  # Runs only on push to main branch
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: 📥 Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up SSH
+      - name: 🔐 Set up SSH access
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.EC2KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.EC2_IP }} >> ~/.ssh/known_hosts
 
-      - name: Copy files to EC2
+      - name: 🚀 Deploy backend code to EC2
         run: |
           rsync -avz --delete ./ ${{ secrets.USER }}@${{ secrets.EC2_IP }}:/var/www/zion-backend/
 
-      - name: Install dependencies & restart backend
+      - name: 🔄 Install dependencies and restart with PM2
         run: |
-          ssh ${{ secrets.USER }}@${{ secrets.EC2_IP }} "
-            cd /var/www/zion-backend &&
-            npm install &&
-            pm2 start index.js --name zion-backend || pm2 restart zion-backend
-          "
+          ssh ${{ secrets.USER }}@${{ secrets.EC2_IP }} << 'EOF'
+            cd /var/www/zion-backend
+            npm install
+
+            # Check if app is already running, then restart; otherwise start it
+            if pm2 list | grep -q "zion-backend"; then
+              pm2 restart zion-backend
+            else
+              pm2 start index.js --name zion-backend
+            fi
+
+            pm2 save
+          EOF
